@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>民族音乐问答助手</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="title">民族音乐问答助手</div>
+        <div class="subtitle">仅回答民族音乐相关问题</div>
+        <div class="badges" aria-label="功能提示">
+          <div class="badge">参考资料优先</div>
+          <div class="badge">Markdown 美化</div>
+          <div class="badge">民族乐器元素</div>
+          <button class="badge-btn" id="showPrompt" type="button">查看提示词</button>
+        </div>
+      </header>
+
+      <main class="chat" id="chat"></main>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <label class="select" title="RAG=检索片段注入；全量=把所有资料拼接进提示词（更耗 tokens）">
+          <span class="select-text">资料模式</span>
+          <select class="select-input" id="refMode">
+            <option value="rag" selected>RAG（推荐）</option>
+            <option value="full">全量资料（对比）</option>
+          </select>
+        </label>
+        <input
+          class="input"
+          id="input"
+          type="text"
+          placeholder="输入你的问题，例如：侗族大歌的多声部特点是什么？"
+          maxlength="2000"
+        />
+        <button class="send" id="send" type="submit">发送</button>
+      </form>
+    </div>
+
+    <div class="modal-backdrop" id="promptModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="本次对话提示词">
+        <div class="modal-header">
+          <div class="modal-title">本次对话完整提示词</div>
+          <div class="modal-actions">
+            <button class="btn" id="copyPrompt" type="button">复制</button>
+            <button class="btn btn-primary" id="closePrompt" type="button">关闭</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <pre class="prompt-pre" id="promptPre"></pre>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
