@@ -36,11 +36,14 @@ py -m uvicorn main:app --host 127.0.0.1 --port 8000
 - `prompt.txt`：系统提示词（限定民族音乐领域，可自行修改）
 - `api_key.txt`：API Key（只读第一行；已被 `.gitignore` 忽略）
 - `references/`：参考资料（`.txt`/`.md`）
+- `knowledge.csv`：知识图谱三元组（实体1,关系,实体2）
 - `rag_index.json`：RAG 索引（自动生成；已忽略）
 - `sessions/`：会话缓存（自动生成；已忽略）
+- `kg_store.py`：知识图谱 CSV 轻量加载与匹配检索
 - `rag_store.py`：RAG 索引与检索逻辑
 - `rag_cli.py`：RAG 操作脚本
 - `session_store.py`：会话落盘与读取
+- `dual_engine_demo.py`：双引擎（RAG+知识图谱）命令行演示脚本
 - `requirements.txt`：依赖
 
 ## 参考资料（RAG / 全量对比）
@@ -52,6 +55,24 @@ py -m uvicorn main:app --host 127.0.0.1 --port 8000
 - `全量资料（对比）`：把 `references/` 内容拼接进提示词（可能截断），token 最耗
 
 注意：全量模式不会把 20 万字无限制塞进模型输入。为了防止超出上下文，会按字符上限截断（由 `FULL_REF_MAX_CHARS` 控制，默认 20000）。
+
+## 知识图谱（CSV）
+
+把你的知识图谱放在项目根目录 `knowledge.csv`，每行格式：
+
+```
+实体1,关系,实体2
+```
+
+服务端会在用户提问时自动从 CSV 中匹配相关三元组，并与 RAG 结果一起注入提示词，作为科教回答证据来源之一。
+
+## 双引擎演示脚本
+
+你可以直接用命令行演示“RAG + 知识图谱”整合效果：
+
+```powershell
+py dual_engine_demo.py "侗族大歌有哪些特点？"
+```
 
 ## 构建/更新 RAG 索引（脚本）
 

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
+from kg_store import KnowledgeGraph, format_triples
 from rag_store import RagIndex, build_rag_index, load_rag_index, save_rag_index
 from session_store import load_session, save_session
 
@@ -18,10 +19,12 @@ BASE_DIR = Path(__file__).resolve().parent
 PROMPT_PATH = BASE_DIR / "prompt.txt"
 API_KEY_PATH = BASE_DIR / "api_key.txt"
 REFS_DIR = BASE_DIR / "references"
+KG_PATH = BASE_DIR / "knowledge.csv"
 INDEX_PATH = BASE_DIR / "rag_index.json"
 SESSIONS_DIR = BASE_DIR / "sessions"
 
 _rag_index: RagIndex | None = None
+_kg = KnowledgeGraph(KG_PATH)
 
 
 def read_text_file(path: Path) -> str:
@@ -242,6 +245,13 @@ def build_system_content(
         sys_content = sys_content + "\n\n参考资料摘录（检索结果）：\n" + joined
     if ref_mode == "full" and full_text:
         sys_content = sys_content + "\n\n参考资料库（全量，可能截断）：\n" + full_text
+
+    kg_triples = _kg.query(user_query, top_k=10, expand=10)
+    kg_text = format_triples(kg_triples)
+    if kg_text:
+        if len(kg_text) > 1500:
+            kg_text = kg_text[:1500].rstrip()
+        sys_content = sys_content + "\n\n知识图谱（CSV，自动匹配）：\n" + kg_text
     return sys_content
 
 
