@@ -19,7 +19,9 @@ BASE_DIR = Path(__file__).resolve().parent
 PROMPT_PATH = BASE_DIR / "prompt.txt"
 API_KEY_PATH = BASE_DIR / "api_key.txt"
 REFS_DIR = BASE_DIR / "references"
-KG_PATH = BASE_DIR / "knowledge.csv"
+KG_PATH = BASE_DIR / "references" / "knowledge" / "knowledge.csv"
+if not KG_PATH.exists():
+    KG_PATH = BASE_DIR / "knowledge.csv"
 INDEX_PATH = BASE_DIR / "rag_index.json"
 SESSIONS_DIR = BASE_DIR / "sessions"
 
@@ -347,4 +349,3 @@ if __name__ == "__main__":
         port = 8002
 
     uvicorn.run("main:app", host=host, port=port, reload=False)
-

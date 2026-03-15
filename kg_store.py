@@ -21,6 +21,29 @@ def _tokenize(text: str) -> list[str]:
     return words + cjk_bigrams
 
 
+def _cjk_count(text: str) -> int:
+    return len(_CJK_RE.findall(text or ""))
+
+
+def _choose_encoding(path: Path) -> str:
+    try:
+        sample = path.read_bytes()[:8192]
+    except Exception:
+        return "utf-8"
+
+    try:
+        t_utf8 = sample.decode("utf-8")
+    except UnicodeDecodeError:
+        return "gb18030"
+
+    try:
+        t_gbk = sample.decode("gb18030", errors="ignore")
+    except Exception:
+        return "utf-8"
+
+    return "gb18030" if _cjk_count(t_gbk) > _cjk_count(t_utf8) else "utf-8-sig"
+
+
 @dataclass(frozen=True)
 class Triple:
     row_id: int
@@ -57,7 +80,8 @@ class KnowledgeGraph:
         inv: dict[str, list[int]] = {}
         entities: dict[str, list[int]] = {}
 
-        with self.csv_path.open("r", encoding="utf-8", errors="ignore", newline="") as f:
+        encoding = _choose_encoding(self.csv_path)
+        with self.csv_path.open("r", encoding=encoding, errors="ignore", newline="") as f:
             reader = csv.reader(f)
             for row_idx, row in enumerate(reader, start=1):
                 if not row or len(row) < 3:
@@ -134,4 +158,3 @@ def format_triples(triples: list[Triple]) -> str:
     for tr in triples:
         lines.append(f"{tr.head} -[{tr.rel}]-> {tr.tail}（来源: knowledge.csv#L{tr.row_id}）")
     return "\n".join(lines)
-

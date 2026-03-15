@@ -36,7 +36,7 @@ py -m uvicorn main:app --host 127.0.0.1 --port 8000
 - `prompt.txt`：系统提示词（限定民族音乐领域，可自行修改）
 - `api_key.txt`：API Key（只读第一行；已被 `.gitignore` 忽略）
 - `references/`：参考资料（`.txt`/`.md`）
-- `knowledge.csv`：知识图谱三元组（实体1,关系,实体2）
+- `references/knowledge/knowledge.csv`：知识图谱三元组（实体1,关系,实体2）
 - `rag_index.json`：RAG 索引（自动生成；已忽略）
 - `sessions/`：会话缓存（自动生成；已忽略）
 - `kg_store.py`：知识图谱 CSV 轻量加载与匹配检索
@@ -58,7 +58,7 @@ py -m uvicorn main:app --host 127.0.0.1 --port 8000
 
 ## 知识图谱（CSV）
 
-把你的知识图谱放在项目根目录 `knowledge.csv`，每行格式：
+把你的知识图谱放在 `references/knowledge/knowledge.csv`，每行格式：
 
 ```
 实体1,关系,实体2

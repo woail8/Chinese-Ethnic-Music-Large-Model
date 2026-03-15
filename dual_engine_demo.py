@@ -3,7 +3,7 @@
 
 目标：
 1）从 references/ 中检索文本资料（RAG）
-2）从 knowledge.csv 中匹配相关三元组（轻量知识图谱）
+2）从 references/knowledge/knowledge.csv 中匹配相关三元组（轻量知识图谱）
 3）把两者合并进同一个 prompt，交给 DeepSeek 回答
 
 依赖：只用本项目自带模块 + requests（见 requirements.txt）
@@ -28,7 +28,9 @@ API_KEY_PATH = BASE_DIR / "api_key.txt"
 PROMPT_PATH = BASE_DIR / "prompt.txt"
 REFS_DIR = BASE_DIR / "references"
 RAG_INDEX_PATH = BASE_DIR / "rag_index.json"
-KG_PATH = BASE_DIR / "knowledge.csv"
+KG_PATH = BASE_DIR / "references" / "knowledge" / "knowledge.csv"
+if not KG_PATH.exists():
+    KG_PATH = BASE_DIR / "knowledge.csv"
 
 
 def read_text(path: Path) -> str:
