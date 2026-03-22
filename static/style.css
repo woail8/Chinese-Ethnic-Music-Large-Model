@@ -61,6 +61,13 @@ body::after {
   padding: 20px 16px 10px;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .title {
   font-size: 18px;
   font-weight: 650;
@@ -101,6 +108,10 @@ body::after {
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(10px);
   cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .badge-btn:hover {
@@ -313,6 +324,24 @@ body::after {
   background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.22));
 }
 
+.music-player {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
+.music-player audio {
+  width: 100%;
+}
+
+.music-player a {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: underline;
+}
+
 .input {
   flex: 1;
   height: 42px;
@@ -514,4 +543,3 @@ body::after {
   border: 2px solid rgba(0, 0, 0, 0);
   background-clip: padding-box;
 }
-

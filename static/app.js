@@ -4,6 +4,7 @@ const inputEl = document.getElementById("input");
 const sendEl = document.getElementById("send");
 const refModeEl = document.getElementById("refMode");
 const showPromptEl = document.getElementById("showPrompt");
+const clearMusicEl = document.getElementById("clearMusic");
 const promptModalEl = document.getElementById("promptModal");
 const promptPreEl = document.getElementById("promptPre");
 const closePromptEl = document.getElementById("closePrompt");
@@ -303,6 +304,7 @@ async function sendMessage(text) {
     const sid = (data.session_id || "").toString();
     if (sid) state.sessionId = sid;
     const usedMode = (data.ref_mode || refMode || "").toString() || refMode;
+    const musicJobId = (data.music_job_id || "").toString();
 
     function fmt(u) {
       if (!u) return "";
@@ -326,6 +328,115 @@ async function sendMessage(text) {
 
     stopThinking();
     addMessage("assistant", answer, meta);
+
+    if (musicJobId) {
+      const row = createRow("assistant");
+      const bubble = document.createElement("div");
+      bubble.className = "bubble assistant";
+
+      const md = document.createElement("div");
+      md.className = "md";
+      md.textContent = "已加入队列，等待提交至 Mureka…";
+      bubble.appendChild(md);
+
+      const player = document.createElement("div");
+      player.className = "music-player";
+      bubble.appendChild(player);
+
+      row.appendChild(bubble);
+      chatEl.appendChild(row);
+      scrollToBottom();
+
+      const update = ({ text, playUrl, taskId }) => {
+        md.textContent = text;
+        player.innerHTML = "";
+        if (playUrl) {
+          const audio = document.createElement("audio");
+          audio.controls = true;
+          audio.preload = "none";
+          audio.src = playUrl;
+          player.appendChild(audio);
+          if (taskId) {
+            const dl = document.createElement("a");
+            dl.href = `/api/music/mp3?task_id=${encodeURIComponent(taskId)}`;
+            dl.target = "_blank";
+            dl.rel = "noreferrer";
+            dl.textContent = "下载 MP3";
+            player.appendChild(dl);
+          }
+        }
+        scrollToBottom();
+      };
+
+      const normalize = (s) => (s || "").toString().toLowerCase();
+      let tries = 0;
+      const poll = window.setInterval(async () => {
+        tries += 1;
+        try {
+          const r = await fetch("/api/music/job");
+          const data2 = await r.json().catch(() => ({}));
+          const current = data2.current || {};
+          const queue = Array.isArray(data2.queue) ? data2.queue : [];
+          const queueLen = Number(data2.queue_len || queue.length || 0);
+
+          const clearedAt = Number(current.cleared_at || 0);
+          const clearedReason = (current.cleared_reason || "").toString();
+          const prev = current.previous || {};
+          if (clearedAt && prev && prev.job_id === musicJobId) {
+            window.clearInterval(poll);
+            const rr = clearedReason ? `（原因：${clearedReason}）` : "";
+            update({ text: `已终止本次音乐生成${rr}`, playUrl: "", taskId: "" });
+            return;
+          }
+
+          if (current && current.job_id === musicJobId) {
+            const taskId = (current.task_id || "").toString();
+            const status = normalize(current.task_status || "");
+            const traceId = (current.trace_id || "").toString();
+            const audioUrl = (current.audio_url || "").toString().trim();
+            const streamUrl = (current.stream_url || "").toString().trim();
+            const err = (current.error || "").toString();
+
+            const parts = [];
+            if (audioUrl) parts.push("音乐已生成（MP3），可播放。");
+            else if (streamUrl) parts.push("音乐生成中（流式 AAC），可试听。");
+            else if (err) parts.push(`音乐生成失败：${err}`);
+            else if (status) parts.push(`音乐生成中：${status}`);
+            else parts.push("Mureka 无响应");
+            if (taskId) parts.push(`task_id: ${taskId}`);
+            if (status) parts.push(`status: ${status}`);
+            if (traceId) parts.push(`trace_id: ${traceId}`);
+            update({ text: parts.join("｜"), playUrl: audioUrl || streamUrl, taskId });
+
+            if (audioUrl || status === "succeeded" || status === "failed" || status === "timeouted" || status === "cancelled") {
+              window.clearInterval(poll);
+            }
+            return;
+          }
+
+          const idx = queue.findIndex((x) => x && x.job_id === musicJobId);
+          if (idx >= 0) {
+            const x = queue[idx] || {};
+            const err = (x.submit_error || "").toString();
+            const parts = [`排队中：第 ${idx + 1} 位 / 共 ${queueLen} 位`];
+            if (err) parts.push(`上次提交被拒绝：${err}`);
+            update({ text: parts.join("｜"), playUrl: "", taskId: "" });
+            return;
+          }
+
+          if (tries > 60) {
+            window.clearInterval(poll);
+            update({ text: "任务状态未知：已停止查询。", playUrl: "", taskId: "" });
+          }
+        } catch (e) {
+          if (tries > 6) {
+            window.clearInterval(poll);
+            const msg = e && e.message ? e.message : "发生未知错误。";
+            update({ text: `任务查询失败：${msg}`, playUrl: "", taskId: "" });
+          }
+        }
+      }, 10000);
+    }
   } catch (e) {
     stopThinking();
     const msg = e && e.message ? e.message : "发生未知错误。";
@@ -358,6 +469,30 @@ function closePromptModal() {
   promptModalEl.hidden = true;
 }
 
+async function clearMusicJob() {
+  try {
+    const resp = await fetch("/api/music/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "ui_clear_button" }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const detail = data.detail || "清空失败。";
+      throw new Error(detail);
+    }
+    const prev = data.previous || {};
+    const tid = (prev.task_id || "").toString();
+    const st = (prev.task_status || "").toString();
+    let msg = "已清空当前音乐任务。";
+    if (tid) msg += `（task_id=${tid}${st ? `，status=${st}` : ""}）`;
+    addMessage("assistant", msg);
+  } catch (e) {
+    const msg = e && e.message ? e.message : "发生未知错误。";
+    addMessage("assistant", `清空音乐任务失败：${msg}`);
+  }
+}
+
 async function showPrompt() {
   if (!state.sessionId) {
     openPromptModal("暂无会话提示词：请先发送一条消息。");
@@ -383,6 +518,9 @@ async function showPrompt() {
 
 if (showPromptEl) {
   showPromptEl.addEventListener("click", () => showPrompt());
+}
+if (clearMusicEl) {
+  clearMusicEl.addEventListener("click", () => clearMusicJob());
 }
 if (closePromptEl) {
   closePromptEl.addEventListener("click", () => closePromptModal());

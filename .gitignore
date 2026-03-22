@@ -6,4 +6,5 @@ venv/
 api_key.txt
 rag_index.json
 sessions/
-
+mureka_api_key.txt
+music_job.json

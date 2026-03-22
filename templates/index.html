@@ -10,13 +10,17 @@
   <body>
     <div class="app">
       <header class="header">
-        <div class="title">民族音乐问答助手</div>
+        <div class="header-top">
+          <div class="title">民族音乐问答助手</div>
+          <a class="badge-btn" href="/simulator">进入模拟演奏</a>
+        </div>
         <div class="subtitle">仅回答民族音乐相关问题</div>
         <div class="badges" aria-label="功能提示">
           <div class="badge">参考资料优先</div>
           <div class="badge">Markdown 美化</div>
           <div class="badge">民族乐器元素</div>
           <button class="badge-btn" id="showPrompt" type="button">查看提示词</button>
+          <button class="badge-btn" id="clearMusic" type="button">清空音乐任务</button>
         </div>
       </header>
 
@@ -59,4 +63,3 @@
     <script src="/static/app.js"></script>
   </body>
 </html>
-

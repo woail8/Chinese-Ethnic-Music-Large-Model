@@ -5,11 +5,15 @@
 - 支持参考资料检索增强（RAG）与“全量资料（对比）”模式
 - 支持会话复用与自动摘要，减少重复 token
 - 支持展示每次回复的 token 用量，并可查看本次请求的完整提示词（messages）
+- 支持 DeepSeek → Mureka 生成音乐，并在网页端播放
 
 ## 快速开始（Windows）
 
 1）填写 API Key  
 编辑 `api_key.txt` 第一行，替换为你的 DeepSeek API Key。
+
+1）填写 Mureka API Key  
+编辑 `mureka_api_key.txt` 第一行，替换为你的 Mureka API Key。
 
 2）安装依赖
 
@@ -35,6 +39,7 @@ py -m uvicorn main:app --host 127.0.0.1 --port 8000
 - `static/motifs.svg`：民族音乐/乐器纹样背景
 - `prompt.txt`：系统提示词（限定民族音乐领域，可自行修改）
 - `api_key.txt`：API Key（只读第一行；已被 `.gitignore` 忽略）
+- `mureka_api_key.txt`：Mureka API Key（只读第一行；已被 `.gitignore` 忽略）
 - `references/`：参考资料（`.txt`/`.md`）
 - `references/knowledge/knowledge.csv`：知识图谱三元组（实体1,关系,实体2）
 - `rag_index.json`：RAG 索引（自动生成；已忽略）
@@ -115,3 +120,23 @@ py rag_cli.py search "侗族大歌 多声部 特点"
 - `HOST`：服务监听地址（默认 127.0.0.1）
 - `RAG_AUTO_BUILD`：是否自动重建索引（默认 1；设为 0 关闭）
 - `FULL_REF_MAX_CHARS`：全量资料模式注入字符上限（默认 20000）
+- `MUREKA_BASE_URL`：Mureka API 基地址（默认 https://api.mureka.cn）
+
+## Mureka 音乐生成
+
+后端会按官方接口调用：
+- `POST https://api.mureka.cn/v1/song/generate`（创建生成任务）
+- `GET  https://api.mureka.cn/v1/song/query/{task_id}`（轮询查询任务）
+
+网页端使用“AI 生成音乐（Mureka）”区域：输入主题/风格后，系统会先用 DeepSeek 生成 lyrics/prompt，并写入 `music_job.json`。当该 JSON 更新时，服务端会自动读取并调用 Mureka 创建任务，然后前端轮询直到拿到可播放的音频链接并在线播放。
+
+### 修改 DeepSeek 作曲提示词（推荐）
+
+编辑 `prompt.txt`，其中包含“问答模式 + 音乐生成模式”的统一提示词文档。
+后端会用自定义解析算法从 DeepSeek 输出中提取：
+- 创作思路：`<MUREKA_THOUGHT>...</MUREKA_THOUGHT>`
+- 歌词：`<MUREKA_LYRICS>...</MUREKA_LYRICS>`
+- 生成提示词：`<MUREKA_PROMPT>...</MUREKA_PROMPT>`
+- 元信息：`<MUREKA_META>{"model":"auto","n":1,"stream":true}</MUREKA_META>`
+
+当用户提出作曲需求时，前端只展示创作思路，并额外新增一个“等待音乐生成结果”的气泡；后台会自动调用 Mureka，成功则在该气泡内展示播放器，失败则显示错误信息/trace_id。
