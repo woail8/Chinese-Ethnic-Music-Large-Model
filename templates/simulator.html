@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>模拟乐器演奏（采样）</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/simulator.css" />
+  </head>
+  <body>
+    <div class="sim-app">
+      <header class="sim-header">
+        <div class="sim-title">模拟乐器演奏（采样）</div>
+        <div class="sim-subtitle">上传 MIDI，选择音色，生成并播放 WAV；卷帘图与列表随播放联动</div>
+        <div class="sim-actions">
+          <a class="sim-link" href="/">返回问答</a>
+        </div>
+      </header>
+
+      <section class="sim-panel">
+        <div class="sim-row">
+          <div class="sim-field">
+            <span class="sim-label">输入方式</span>
+            <div class="sim-seg">
+              <button id="tabMidi" class="sim-seg-btn is-active" type="button">上传MIDI</button>
+              <button id="tabScore" class="sim-seg-btn" type="button">粘贴乐谱文本</button>
+              <button id="tabOcr" class="sim-seg-btn" type="button">上传乐谱图片</button>
+            </div>
+          </div>
+          <label class="sim-field">
+            <span class="sim-label">音色</span>
+            <select id="instrument" class="sim-select"></select>
+          </label>
+          <div class="sim-buttons">
+            <button id="btnAnalyze" class="sim-btn" type="button">加载并显示</button>
+            <button id="btnRender" class="sim-btn" type="button">合成WAV</button>
+            <button id="btnRenderPlay" class="sim-btn sim-btn-primary" type="button">合成并播放</button>
+          </div>
+        </div>
+
+        <div id="panelMidi" class="sim-input-panel">
+          <label class="sim-field">
+            <span class="sim-label">MIDI 文件</span>
+            <input id="midiFile" class="sim-input" type="file" accept=".mid,.midi" />
+          </label>
+        </div>
+
+        <div id="panelScore" class="sim-input-panel" hidden>
+          <div class="sim-score-grid">
+            <label class="sim-field sim-score-text">
+              <span class="sim-label">乐谱文本（模型输出序列）</span>
+              <textarea id="scoreText" class="sim-textarea" rows="5" placeholder="例如：1_2_3_|5--6_5_|"></textarea>
+            </label>
+            <div class="sim-score-params">
+              <label class="sim-field">
+                <span class="sim-label">调号</span>
+                <select id="keySig" class="sim-select">
+                  <option value="C major" selected>C major</option>
+                  <option value="G major">G major</option>
+                  <option value="D major">D major</option>
+                  <option value="A major">A major</option>
+                  <option value="E major">E major</option>
+                  <option value="B major">B major</option>
+                  <option value="F# major">F# major</option>
+                  <option value="F major">F major</option>
+                  <option value="Bb major">Bb major</option>
+                  <option value="Eb major">Eb major</option>
+                  <option value="Ab major">Ab major</option>
+                  <option value="Db major">Db major</option>
+                  <option value="Gb major">Gb major</option>
+                  <option value="A minor">A minor</option>
+                  <option value="E minor">E minor</option>
+                  <option value="D minor">D minor</option>
+                  <option value="G minor">G minor</option>
+                  <option value="C minor">C minor</option>
+                  <option value="F minor">F minor</option>
+                </select>
+              </label>
+              <label class="sim-field">
+                <span class="sim-label">拍号</span>
+                <input id="timeSig" class="sim-input" type="text" value="4/4" />
+              </label>
+              <label class="sim-field">
+                <span class="sim-label">速度(BPM)</span>
+                <input id="bpm" class="sim-input" type="number" value="120" min="20" max="300" />
+              </label>
+              <label class="sim-field">
+                <span class="sim-label">Do=</span>
+                <input id="doNote" class="sim-input" type="text" value="C4" />
+              </label>
+              <label class="sim-field">
+                <span class="sim-label">无下划线时值(拍)</span>
+                <input id="noUnderscore" class="sim-input" type="number" value="2" min="0.125" max="8" step="0.125" />
+              </label>
+              <div class="sim-buttons sim-score-buttons">
+                <button id="btnScoreToMidi" class="sim-btn" type="button">文本转MIDI并加载</button>
+                <button id="btnDownloadMidi" class="sim-btn" type="button" disabled>下载MIDI</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="panelOcr" class="sim-input-panel" hidden>
+          <div class="sim-ocr-grid">
+            <div class="sim-ocr-left">
+              <label class="sim-field">
+                <span class="sim-label">乐谱图片</span>
+                <input id="ocrFile" class="sim-input" type="file" accept="image/*" />
+              </label>
+              <div class="sim-buttons" style="margin-top:10px;">
+                <button id="btnOcrRecognize" class="sim-btn" type="button">开始识别</button>
+                <button id="btnOcrToScore" class="sim-btn" type="button" disabled>填入乐谱文本</button>
+                <button id="btnOcrOpenEditor" class="sim-btn" type="button" disabled>打开纠错</button>
+              </div>
+
+              <div class="sim-ocr-preview">
+                <div class="sim-ocr-preview-title">处理后图片</div>
+                <img id="ocrProcessedImg" class="sim-ocr-img" alt="processed" />
+              </div>
+            </div>
+
+            <div class="sim-ocr-right">
+              <div class="sim-ocr-preview-title">识别输出序列</div>
+              <textarea id="ocrSequence" class="sim-textarea" rows="8" readonly></textarea>
+            </div>
+          </div>
+
+          <div id="ocrEditor" class="sim-editor" hidden>
+            <div class="sim-editor-left">
+              <div class="sim-ocr-preview-title">手动纠错（多图层）</div>
+              <div id="ocrStage" class="sim-stage">
+                <canvas id="ocrBaseCanvas" class="sim-stage-base"></canvas>
+                <canvas id="ocrDigitCanvas" class="sim-stage-overlay"></canvas>
+                <canvas id="ocrVlineCanvas" class="sim-stage-overlay"></canvas>
+                <canvas id="ocrHlineCanvas" class="sim-stage-overlay"></canvas>
+                <canvas id="ocrDotCanvas" class="sim-stage-overlay"></canvas>
+                <canvas id="ocrAccCanvas" class="sim-stage-overlay"></canvas>
+                <canvas id="ocrRedCanvas" class="sim-stage-overlay"></canvas>
+              </div>
+              <div class="sim-status" id="ocrEditorStatus"></div>
+            </div>
+            <div class="sim-editor-right">
+              <div class="sim-ocr-preview-title">标注编辑</div>
+              <div class="sim-editor-controls">
+                <div class="sim-editor-row">
+                  <span class="sim-label">显示图层</span>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_digit" checked /><span>数字</span></label>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_vline" checked /><span>竖线</span></label>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_hline" checked /><span>横线</span></label>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_dot" checked /><span>点</span></label>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_acc" checked /><span>#/b</span></label>
+                  <label class="sim-toggle"><input type="checkbox" id="ocr_show_red" checked /><span>红线</span></label>
+                </div>
+
+                <div class="sim-editor-row" style="margin-top:8px;">
+                  <span class="sim-label">编辑图层</span>
+                  <label class="sim-toggle"><input type="radio" name="ocrActiveLayer" value="digit" checked /><span>数字</span></label>
+                  <label class="sim-toggle"><input type="radio" name="ocrActiveLayer" value="accidental" /><span>#/b</span></label>
+                  <label class="sim-toggle"><input type="radio" name="ocrActiveLayer" value="dot" /><span>点</span></label>
+                  <label class="sim-toggle"><input type="radio" name="ocrActiveLayer" value="hline" /><span>横线</span></label>
+                  <label class="sim-toggle"><input type="radio" name="ocrActiveLayer" value="vline" /><span>竖线</span></label>
+                </div>
+
+                <div class="sim-editor-row" style="margin-top:8px;">
+                  <label class="sim-field sim-field-inline">
+                    <span class="sim-label">类型</span>
+                    <select id="ocrType" class="sim-select sim-select-sm">
+                      <option value="digit">数字</option>
+                      <option value="accidental">#/b</option>
+                      <option value="dot">点</option>
+                      <option value="hline">横线</option>
+                      <option value="vline">竖线</option>
+                    </select>
+                  </label>
+                  <label class="sim-field sim-field-inline">
+                    <span class="sim-label">文本</span>
+                    <input id="ocrText" class="sim-input" type="text" />
+                  </label>
+                </div>
+
+                <div class="sim-editor-row" style="margin-top:8px;">
+                  <label class="sim-field sim-field-inline"><span class="sim-label">X</span><input id="ocrX" class="sim-input sim-num" type="number" /></label>
+                  <label class="sim-field sim-field-inline"><span class="sim-label">Y</span><input id="ocrY" class="sim-input sim-num" type="number" /></label>
+                  <label class="sim-field sim-field-inline"><span class="sim-label">W</span><input id="ocrW" class="sim-input sim-num" type="number" /></label>
+                  <label class="sim-field sim-field-inline"><span class="sim-label">H</span><input id="ocrH" class="sim-input sim-num" type="number" /></label>
+                </div>
+
+                <div class="sim-buttons" style="margin-top:10px;">
+                  <button id="ocrApply" class="sim-btn" type="button">应用修改</button>
+                  <button id="ocrDel" class="sim-btn" type="button">删除选中</button>
+                  <button id="ocrAdd" class="sim-btn" type="button">新增框</button>
+                  <button id="ocrSave" class="sim-btn sim-btn-primary" type="button">保存并生成序列</button>
+                  <button id="ocrCloseEditor" class="sim-btn" type="button">关闭纠错</button>
+                </div>
+
+                <div class="sim-status" id="ocrMsg"></div>
+                <div class="sim-ocr-preview-title" style="margin-top:8px;">输出序列（保存后刷新）</div>
+                <textarea id="ocrEditorSeq" class="sim-textarea" rows="6" readonly></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sim-row sim-row-2">
+          <div class="sim-playbar">
+            <button id="btnPlay" class="sim-btn" type="button">播放/继续</button>
+            <button id="btnPause" class="sim-btn" type="button">暂停</button>
+            <button id="btnStop" class="sim-btn" type="button">停止</button>
+            <button id="btnBack" class="sim-btn" type="button">回退5s</button>
+            <button id="btnForward" class="sim-btn" type="button">快进5s</button>
+            <button id="btnReplay" class="sim-btn" type="button">重播</button>
+
+            <label class="sim-field sim-field-inline">
+              <span class="sim-label">速度</span>
+              <select id="speed" class="sim-select sim-select-sm">
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+
+            <label class="sim-toggle">
+              <input id="follow" type="checkbox" checked />
+              <span>跟随播放指针</span>
+            </label>
+
+            <div class="sim-time" id="timeText">00:00.000 / 00:00.000</div>
+          </div>
+        </div>
+
+        <div class="sim-row sim-row-3">
+          <input id="timeline" class="sim-range" type="range" min="0" max="0" step="1" value="0" />
+          <audio id="audio" preload="auto"></audio>
+        </div>
+
+        <div class="sim-status" id="status">就绪</div>
+      </section>
+
+      <main class="sim-main">
+        <section class="sim-roll">
+          <div class="sim-roll-title">钢琴卷帘</div>
+          <div id="rollWrap" class="sim-roll-wrap">
+            <canvas id="rollCanvas"></canvas>
+            <canvas id="headCanvas"></canvas>
+          </div>
+          <div class="sim-hint" id="hoverHint"></div>
+        </section>
+
+        <section class="sim-list">
+          <div class="sim-roll-title">列表</div>
+          <div class="sim-table-wrap">
+            <table class="sim-table">
+              <thead>
+                <tr>
+                  <th>开始(s)</th>
+                  <th>时长(s)</th>
+                  <th>音名</th>
+                  <th>MIDI</th>
+                  <th>力度</th>
+                  <th>通道</th>
+                </tr>
+              </thead>
+              <tbody id="eventTbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/simulator.js"></script>
+  </body>
+</html>

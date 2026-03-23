@@ -1,0 +1,14 @@
+说明
+本文件夹用于集中存放“网页前端页面”的代码（HTML/CSS/JS）。
+
+文件
+1) index.html：上传图片并展示识别序列与结果图的页面模板。
+2) editor.html：手动纠错页面模板（分图层显示与分图层编辑）。
+
+注意
+以上页面为服务端模板（含 {{ }} / {% %} 占位符），需由后端渲染并提供接口：
+ - /recognize
+ - /editor/<sid>
+ - /api/annotation/<sid>
+ - /processed/<sid>
+ - /original/<sid>

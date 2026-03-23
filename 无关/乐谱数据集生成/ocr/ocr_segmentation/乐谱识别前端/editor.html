@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>手动纠错</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 18px; color: #111; }
+      .wrap { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1200px; margin: 0 auto; }
+      @media (min-width: 1100px) { .wrap { grid-template-columns: 1.4fr 1fr; } }
+      .panel { background: #fff; border: 1px solid #eee; border-radius: 10px; padding: 12px; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      label { font-size: 13px; color: #333; }
+      input, select, button, textarea { font: inherit; }
+      input[type="number"] { width: 92px; }
+      input[type="text"] { width: 120px; }
+      textarea { width: 100%; min-height: 140px; resize: vertical; }
+      button { padding: 7px 12px; cursor: pointer; }
+      .hint { font-size: 12px; color: #555; }
+      #stage { position: relative; width: 100%; }
+      #stage canvas { display: block; width: 100%; border: 1px solid #eee; border-radius: 10px; background: transparent; touch-action: none; }
+      #stage canvas.overlay { position: absolute; inset: 0; border: none; border-radius: 10px; }
+      #stage canvas.base { background: #fafafa; }
+      .err { color: #b00020; font-size: 13px; margin-top: 6px; }
+      .ok { color: #0b6b0b; font-size: 13px; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="panel">
+        <h1>手动纠错</h1>
+        <div class="hint">选择需要显示的图层；选择一个“编辑图层”后才能在该图层上编辑（拖动/缩放/新增/删除）。</div>
+        <div id="stage">
+          <canvas id="baseCanvas" class="base"></canvas>
+          <canvas id="digitCanvas" class="overlay"></canvas>
+          <canvas id="vlineCanvas" class="overlay"></canvas>
+          <canvas id="hlineCanvas" class="overlay"></canvas>
+          <canvas id="dotCanvas" class="overlay"></canvas>
+          <canvas id="accCanvas" class="overlay"></canvas>
+          <canvas id="redCanvas" class="overlay"></canvas>
+        </div>
+        <div id="status" class="hint"></div>
+      </div>
+
+      <div class="panel">
+        <h1>标注编辑</h1>
+        <div class="row">
+          <label>显示图层</label>
+          <label><input type="checkbox" id="show_digit" checked />数字</label>
+          <label><input type="checkbox" id="show_vline" checked />竖线</label>
+          <label><input type="checkbox" id="show_hline" checked />横线</label>
+          <label><input type="checkbox" id="show_dot" checked />点</label>
+          <label><input type="checkbox" id="show_acc" checked /># / b</label>
+          <label><input type="checkbox" id="show_red" checked />红线</label>
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>编辑图层</label>
+          <label><input type="radio" name="activeLayer" value="digit" checked />数字</label>
+          <label><input type="radio" name="activeLayer" value="accidental" /># / b</label>
+          <label><input type="radio" name="activeLayer" value="dot" />点</label>
+          <label><input type="radio" name="activeLayer" value="hline" />横线</label>
+          <label><input type="radio" name="activeLayer" value="vline" />竖线</label>
+        </div>
+        <div class="row">
+          <label>类型</label>
+          <select id="type">
+            <option value="digit">数字</option>
+            <option value="accidental"># / b</option>
+            <option value="dot">点</option>
+            <option value="hline">水平横线</option>
+            <option value="vline">垂直竖线</option>
+          </select>
+          <label>文本</label>
+          <input id="text" type="text" placeholder="数字/#/b" />
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <label>X</label><input id="x" type="number" />
+          <label>Y</label><input id="y" type="number" />
+          <label>W</label><input id="w" type="number" />
+          <label>H</label><input id="h" type="number" />
+        </div>
+        <div class="row" style="margin-top:10px;">
+          <button id="apply">应用修改</button>
+          <button id="del">删除选中</button>
+          <button id="add">新增框</button>
+          <button id="save">保存并生成序列</button>
+          <a href="/" class="hint">返回上传页</a>
+        </div>
+        <div id="msg"></div>
+        <div style="margin-top:12px;" class="hint">输出序列（保存后刷新）</div>
+        <textarea id="sequence" readonly></textarea>
+      </div>
+    </div>
+
+    <script>
+      const sid = "{{ sid }}";
+      const state = {
+        image: null,
+        imageUrl: null,
+        items: [],
+        lines: [],
+        selected: -1,
+        mode: "idle",
+        drag: null,
+        addText: "",
+        scale: 1,
+        active: "digit",
+        visible: { digit: true, vline: true, hline: true, dot: true, accidental: true, red: true },
+      };
+
+      const baseCanvas = document.getElementById("baseCanvas");
+      const digitCanvas = document.getElementById("digitCanvas");
+      const vlineCanvas = document.getElementById("vlineCanvas");
+      const hlineCanvas = document.getElementById("hlineCanvas");
+      const dotCanvas = document.getElementById("dotCanvas");
+      const accCanvas = document.getElementById("accCanvas");
+      const redCanvas = document.getElementById("redCanvas");
+
+      const canvases = {
+        base: { el: baseCanvas, ctx: baseCanvas.getContext("2d"), type: null },
+        digit: { el: digitCanvas, ctx: digitCanvas.getContext("2d"), type: "digit" },
+        vline: { el: vlineCanvas, ctx: vlineCanvas.getContext("2d"), type: "vline" },
+        hline: { el: hlineCanvas, ctx: hlineCanvas.getContext("2d"), type: "hline" },
+        dot: { el: dotCanvas, ctx: dotCanvas.getContext("2d"), type: "dot" },
+        accidental: { el: accCanvas, ctx: accCanvas.getContext("2d"), type: "accidental" },
+        red: { el: redCanvas, ctx: redCanvas.getContext("2d"), type: "red" },
+      };
+      const elType = document.getElementById("type");
+      const elText = document.getElementById("text");
+      const elX = document.getElementById("x");
+      const elY = document.getElementById("y");
+      const elW = document.getElementById("w");
+      const elH = document.getElementById("h");
+      const elSeq = document.getElementById("sequence");
+      const elMsg = document.getElementById("msg");
+      const elStatus = document.getElementById("status");
+
+      function colorFor(t) {
+        if (t === "digit") return "#ffcc00";
+        if (t === "hline") return "#ff9900";
+        if (t === "vline") return "#00cccc";
+        if (t === "dot") return "#ff33cc";
+        if (t === "accidental") return "#800080";
+        return "#00aa00";
+      }
+
+      function syncLayerPointerEvents() {
+        for (const k of ["digit", "vline", "hline", "dot", "accidental", "red"]) {
+          canvases[k].el.style.pointerEvents = (state.active === k ? "auto" : "none");
+        }
+      }
+
+      function resizeAll() {
+        if (!state.image) return;
+        const iw = state.image.width;
+        const ih = state.image.height;
+        const cw = baseCanvas.clientWidth;
+        const scale = cw / iw;
+        state.scale = scale;
+        const pw = Math.max(1, Math.floor(iw * scale));
+        const ph = Math.max(1, Math.floor(ih * scale));
+        for (const k of Object.keys(canvases)) {
+          canvases[k].el.width = pw;
+          canvases[k].el.height = ph;
+        }
+      }
+
+      function clearCanvas(ctx) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      }
+
+      function drawBase() {
+        const ctx = canvases.base.ctx;
+        clearCanvas(ctx);
+        if (!state.image) return;
+        ctx.drawImage(state.image, 0, 0, ctx.canvas.width, ctx.canvas.height);
+      }
+
+      function drawBoxes(layer, items, selectedIndex) {
+        const ctx = canvases[layer].ctx;
+        clearCanvas(ctx);
+        if (!state.visible[layer]) return;
+        const scale = state.scale || 1;
+        ctx.lineWidth = 2;
+        for (const ent of items) {
+          const x = ent.it.x * scale;
+          const y = ent.it.y * scale;
+          const w = ent.it.w * scale;
+          const h = ent.it.h * scale;
+          ctx.strokeStyle = colorFor(ent.it.type);
+          ctx.strokeRect(x, y, w, h);
+          if (ent.idx === selectedIndex && state.active === layer) {
+            ctx.strokeStyle = "#00aaff";
+            ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+            ctx.fillStyle = "#00aaff";
+            ctx.fillRect(x + w - 6, y + h - 6, 6, 6);
+          }
+        }
+      }
+
+      function drawRedLines() {
+        const ctx = canvases.red.ctx;
+        clearCanvas(ctx);
+        if (!state.visible.red) return;
+        const scale = state.scale || 1;
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 2;
+        const h = ctx.canvas.height;
+        for (const it of state.items) {
+          if (it.type !== "digit") continue;
+          const cx = (it.x + it.w / 2) * scale;
+          ctx.beginPath();
+          ctx.moveTo(cx, 0);
+          ctx.lineTo(cx, h);
+          ctx.stroke();
+        }
+      }
+
+      function redrawAll(preview) {
+        if (!state.image) return;
+        resizeAll();
+        drawBase();
+        const grouped = { digit: [], vline: [], hline: [], dot: [], accidental: [] };
+        for (let i = 0; i < state.items.length; i++) {
+          const it = state.items[i];
+          if (grouped[it.type]) grouped[it.type].push({ idx: i, it });
+        }
+        drawBoxes("digit", grouped.digit, state.selected);
+        drawBoxes("vline", grouped.vline, state.selected);
+        drawBoxes("hline", grouped.hline, state.selected);
+        drawBoxes("dot", grouped.dot, state.selected);
+        drawBoxes("accidental", grouped.accidental, state.selected);
+        drawRedLines();
+        if (preview && state.active && canvases[state.active]) {
+          const ctx = canvases[state.active].ctx;
+          const scale = state.scale || 1;
+          ctx.strokeStyle = "#00aaff";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(preview.x * scale, preview.y * scale, preview.w * scale, preview.h * scale);
+        }
+      }
+
+      function activeTypeFromUi() {
+        return state.active;
+      }
+
+      function pick(mx, my) {
+        const scale = state.scale || 1;
+        const x = mx / scale;
+        const y = my / scale;
+        for (let i = state.items.length - 1; i >= 0; i--) {
+          const it = state.items[i];
+          if (it.type !== activeTypeFromUi()) continue;
+          if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
+        }
+        return -1;
+      }
+
+      function setSelected(i) {
+        state.selected = i;
+        if (i < 0) {
+          elX.value = ""; elY.value = ""; elW.value = ""; elH.value = ""; elText.value = "";
+          return;
+        }
+        const it = state.items[i];
+        elType.value = it.type;
+        elText.value = it.text || "";
+        elX.value = it.x;
+        elY.value = it.y;
+        elW.value = it.w;
+        elH.value = it.h;
+      }
+
+      function clampItem(it) {
+        it.x = Math.max(0, Math.round(it.x));
+        it.y = Math.max(0, Math.round(it.y));
+        it.w = Math.max(1, Math.round(it.w));
+        it.h = Math.max(1, Math.round(it.h));
+      }
+
+      function message(text, ok) {
+        elMsg.className = ok ? "ok" : "err";
+        elMsg.textContent = text || "";
+      }
+
+      function activeCanvasEl() {
+        return canvases[state.active].el;
+      }
+
+      function canvasRect() {
+        return activeCanvasEl().getBoundingClientRect();
+      }
+
+      function setActiveLayer(t) {
+        state.active = t;
+        elType.value = t;
+        setSelected(-1);
+        syncLayerPointerEvents();
+        redrawAll();
+      }
+
+      function handlePointerDown(e) {
+        if (!state.image) return;
+        activeCanvasEl().setPointerCapture(e.pointerId);
+        const rect = canvasRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const idx = pick(mx, my);
+        if (state.mode === "adding") {
+          const scale = state.scale || 1;
+          const x = mx / scale;
+          const y = my / scale;
+          state.drag = { startX: x, startY: y };
+          state.selected = -1;
+          return;
+        }
+        setSelected(idx);
+        if (idx < 0) { redrawAll(); return; }
+        const it = state.items[idx];
+        const scale = state.scale || 1;
+        const x = mx / scale;
+        const y = my / scale;
+        const onHandle = e.shiftKey && (Math.abs((it.x + it.w) - x) <= 8) && (Math.abs((it.y + it.h) - y) <= 8);
+        state.drag = { idx, startX: x, startY: y, orig: { ...it }, mode: onHandle ? "resize" : "move" };
+        redrawAll();
+      }
+
+      function handlePointerMove(e) {
+        if (!state.drag || !state.image) return;
+        const rect = canvasRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const scale = state.scale || 1;
+        const x = mx / scale;
+        const y = my / scale;
+
+        if (state.mode === "adding") {
+          const sx = state.drag.startX;
+          const sy = state.drag.startY;
+          const x0 = Math.min(sx, x);
+          const y0 = Math.min(sy, y);
+          const w = Math.max(1, Math.abs(x - sx));
+          const h = Math.max(1, Math.abs(y - sy));
+          elStatus.textContent = `新框: x=${Math.round(x0)} y=${Math.round(y0)} w=${Math.round(w)} h=${Math.round(h)}`;
+          redrawAll({ x: x0, y: y0, w, h });
+          return;
+        }
+
+        const d = state.drag;
+        const it = state.items[d.idx];
+        if (d.mode === "move") {
+          it.x = d.orig.x + (x - d.startX);
+          it.y = d.orig.y + (y - d.startY);
+        } else {
+          it.w = Math.max(1, d.orig.w + (x - d.startX));
+          it.h = Math.max(1, d.orig.h + (y - d.startY));
+        }
+        clampItem(it);
+        setSelected(d.idx);
+        redrawAll();
+      }
+
+      function handlePointerUp(e) {
+        if (!state.drag || !state.image) return;
+        if (state.mode === "adding") {
+          const rect = canvasRect();
+          const mx = e.clientX - rect.left;
+          const my = e.clientY - rect.top;
+          const scale = state.scale || 1;
+          const x = mx / scale;
+          const y = my / scale;
+          const sx = state.drag.startX;
+          const sy = state.drag.startY;
+          const x0 = Math.min(sx, x);
+          const y0 = Math.min(sy, y);
+          const w = Math.max(1, Math.abs(x - sx));
+          const h = Math.max(1, Math.abs(y - sy));
+          const it = { type: state.active, x: Math.round(x0), y: Math.round(y0), w: Math.round(w), h: Math.round(h) };
+          if (state.active === "digit") it.text = (elText.value || "1");
+          if (state.active === "accidental") it.text = (elText.value === "b" ? "b" : "#");
+          state.items.push(it);
+          state.mode = "idle";
+          state.drag = null;
+          elStatus.textContent = "";
+          setSelected(state.items.length - 1);
+          redrawAll();
+          return;
+        }
+        state.drag = null;
+      }
+
+      for (const k of ["digit", "vline", "hline", "dot", "accidental"]) {
+        canvases[k].el.addEventListener("pointerdown", handlePointerDown);
+        canvases[k].el.addEventListener("pointermove", handlePointerMove);
+        canvases[k].el.addEventListener("pointerup", handlePointerUp);
+      }
+
+      document.getElementById("apply").addEventListener("click", () => {
+        const i = state.selected;
+        if (i < 0) return;
+        const it = state.items[i];
+        it.type = state.active;
+        it.text = elText.value;
+        it.x = parseInt(elX.value, 10);
+        it.y = parseInt(elY.value, 10);
+        it.w = parseInt(elW.value, 10);
+        it.h = parseInt(elH.value, 10);
+        clampItem(it);
+        setSelected(i);
+        redrawAll();
+      });
+
+      document.getElementById("del").addEventListener("click", () => {
+        const i = state.selected;
+        if (i < 0) return;
+        state.items.splice(i, 1);
+        state.selected = -1;
+        setSelected(-1);
+        redrawAll();
+      });
+
+      document.getElementById("add").addEventListener("click", () => {
+        state.mode = "adding";
+        message("在图片上拖拽绘制新框", true);
+      });
+
+      document.getElementById("save").addEventListener("click", async () => {
+        message("", true);
+        const payload = { sid, lines: state.lines, items: state.items };
+        const res = await fetch(`/api/annotation/${sid}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          message(data.error || "保存失败", false);
+          return;
+        }
+        elSeq.value = data.sequence || "";
+        message("已保存并更新序列", true);
+      });
+
+      async function init() {
+        const res = await fetch(`/api/annotation/${sid}`);
+        const data = await res.json();
+        if (!res.ok) {
+          message(data.error || "加载失败", false);
+          return;
+        }
+        state.lines = data.lines || [];
+        state.items = data.items || [];
+        state.imageUrl = data.image_url;
+        state.image = new Image();
+        state.image.onload = () => redrawAll();
+        state.image.src = state.imageUrl;
+        if (typeof data.sequence === "string") elSeq.value = data.sequence;
+        document.getElementById("show_digit").addEventListener("change", (e) => { state.visible.digit = e.target.checked; redrawAll(); });
+        document.getElementById("show_vline").addEventListener("change", (e) => { state.visible.vline = e.target.checked; redrawAll(); });
+        document.getElementById("show_hline").addEventListener("change", (e) => { state.visible.hline = e.target.checked; redrawAll(); });
+        document.getElementById("show_dot").addEventListener("change", (e) => { state.visible.dot = e.target.checked; redrawAll(); });
+        document.getElementById("show_acc").addEventListener("change", (e) => { state.visible.accidental = e.target.checked; redrawAll(); });
+        document.getElementById("show_red").addEventListener("change", (e) => { state.visible.red = e.target.checked; redrawAll(); });
+
+        for (const r of document.querySelectorAll("input[name='activeLayer']")) {
+          r.addEventListener("change", (e) => { if (e.target.checked) setActiveLayer(e.target.value); });
+        }
+        setActiveLayer(state.active);
+      }
+
+      window.addEventListener("resize", () => redrawAll());
+      init();
+    </script>
+  </body>
+</html>
